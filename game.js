@@ -68,7 +68,8 @@ class Asteroid {
     this.y    = y;
     this.size = size;
     this.radius = RADII[size];
-    this.dead = false;
+    this.dead   = false;
+    this.points = POINTS[size];
 
     const angle = rand(0, Math.PI * 2);
     const speed = SPEEDS[size] + rand(-15, 15);
@@ -114,6 +115,71 @@ class Asteroid {
       ctx.lineTo(this.verts[i][0], this.verts[i][1]);
     ctx.closePath();
     ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ── Estrella Fugaz (asteroide especial) ────────────────────────────────────────
+class ShootingStar extends Asteroid {
+  constructor(x, y, size = 3) {
+    super(x, y, size);
+    this.shootingStar = true;
+    this.ttl     = 8;
+    this.points  = POINTS[size] * 2;
+
+    // Velocidad ~3×
+    const speed = SPEEDS[size] * 3 + rand(15, 35);
+    const angle = rand(0, Math.PI * 2);
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+  }
+
+  update(dt) {
+    this.ttl -= dt;
+    if (this.ttl <= 0) {
+      this.dead = true;
+      explode(this.x, this.y, 6);
+      return;
+    }
+    super.update(dt);
+  }
+
+  split() { return []; }
+
+  draw() {
+    const fadeAlpha = this.ttl < 2 ? Math.max(this.ttl / 2, 0) : 1;
+
+    // Estela de cometa: 4 segmentos hacia atrás
+    ctx.save();
+    for (let i = 1; i <= 4; i++) {
+      const t  = i * 0.028;
+      const tx = wrap(this.x - this.vx * t, W);
+      const ty = wrap(this.y - this.vy * t, H);
+      const a  = fadeAlpha * (1 - i / 5) * 0.5;
+      ctx.strokeStyle = `rgba(255,170,0,${a.toFixed(2)})`;
+      ctx.lineWidth   = 3.5 - i * 0.6;
+      ctx.beginPath();
+      ctx.arc(tx, ty, this.radius * (1 - i * 0.12), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Núcleo
+    ctx.globalAlpha = fadeAlpha;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+    ctx.strokeStyle = '#f90';
+    ctx.lineWidth   = 1.8;
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    ctx.moveTo(this.verts[0][0], this.verts[0][1]);
+    for (let i = 1; i < this.verts.length; i++)
+      ctx.lineTo(this.verts[i][0], this.verts[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 }
@@ -290,13 +356,18 @@ let deadTimer;
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
+  const MAX_FUGACES = 2;
   for (let i = 0; i < count; i++) {
     let x, y;
     do {
       x = rand(0, W);
       y = rand(0, H);
     } while (Math.hypot(x - W / 2, y - H / 2) < SAFE_DIST);
-    asteroids.push(new Asteroid(x, y, 3));
+    const fugaces = asteroids.filter(a => a.shootingStar).length;
+    if (fugaces < MAX_FUGACES && Math.random() < 0.2)
+      asteroids.push(new ShootingStar(x, y, 3));
+    else
+      asteroids.push(new Asteroid(x, y, 3));
   }
 }
 
@@ -389,9 +460,9 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += POINTS[a.size];
+        score += a.points;
         explode(a.x, a.y, a.size * 5);
-        if (powerups.length < 3 && Math.random() < 0.08)
+        if (!a.shootingStar && powerups.length < 3 && Math.random() < 0.08)
           powerups.push(new PowerUp(a.x, a.y));
         newAsteroids.push(...a.split());
       }
