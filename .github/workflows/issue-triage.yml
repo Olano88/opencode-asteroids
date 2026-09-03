@@ -1,0 +1,135 @@
+name: Triaje de issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue = context.payload.issue;
+            const title = issue.title || '';
+            const body = issue.body || '';
+            const text = `${title} ${body}`.toLowerCase();
+
+            // --- 1. Detectar categoría por keywords ---
+            const CATEGORIES = [
+              {
+                label: 'bug',
+                color: 'd73a4a',
+                description: 'Algo no funciona correctamente',
+                keywords: ['fallo','bug','error','crash','no funciona','roto','se rompe',
+                           'excepcion','excepción','broken','doesnt work','not working',
+                           'falla','defecto','problema','mal']
+              },
+              {
+                label: 'feature',
+                color: '0075ca',
+                description: 'Funcionalidad nueva o solicitud',
+                keywords: ['feature','funcion','añadir','agregar','implementar','propuesta',
+                           'new','agregar','nuevo','nueva','solicitar','add','necesito',
+                           'poder','querer']
+              },
+              {
+                label: 'mejora',
+                color: 'e4e669',
+                description: 'Mejora o optimización',
+                keywords: ['mejora','optimizar','rendimiento','refactor','mejor','rapido',
+                           'rapido','mas rapido','pulir','performance','faster','improve',
+                           'optimizar','lento']
+              },
+              {
+                label: 'pregunta',
+                color: 'd876e3',
+                description: 'Pregunta o duda',
+                keywords: ['pregunta','como','duda','?','question','how','ayuda','help']
+              }
+            ];
+
+            let detected = null;
+            for (const cat of CATEGORIES) {
+              if (cat.keywords.some(kw => text.includes(kw))) {
+                detected = cat;
+                break;
+              }
+            }
+
+            const LABEL = detected ? detected.label : 'otros';
+            const LABEL_DESC = detected ? detected.description : 'Otro tipo de issue';
+            const LABEL_COLOR = detected ? detected.color : 'ededed';
+
+            // --- 2. Crear labels si no existen ---
+            const needed = [...CATEGORIES.map(c => ({ label: c.label, color: c.color, description: c.description })),
+                            { label: 'otros', color: 'ededed', description: 'Otro tipo de issue' }];
+
+            const existing = await github.paginate(
+              github.rest.issues.listLabelsForRepo,
+              { owner, repo, per_page: 100 }
+            );
+            const existingNames = new Set(existing.map(l => l.name));
+
+            for (const l of needed) {
+              if (!existingNames.has(l.label)) {
+                await github.rest.issues.createLabel({
+                  owner, repo,
+                  name: l.label,
+                  color: l.color,
+                  description: l.description
+                });
+              }
+            }
+
+            // --- 3. Asignar label detectada ---
+            await github.rest.issues.addLabels({
+              owner, repo,
+              issue_number: issue.number,
+              labels: [LABEL]
+            });
+
+            // --- 4. Construir plantilla de revisión ---
+            const SHORT_SHA = (context.sha || '').slice(0, 7);
+            const REVIEW_HEADING = '⚙️ Información de revisión (añadida automáticamente)';
+
+            if (text.includes(REVIEW_HEADING.toLowerCase())) {
+              core.info('La sección de revisión ya existe, se omite.');
+              return;
+            }
+
+            const template = [
+              '',
+              '---',
+              '',
+              `## ${REVIEW_HEADING}`,
+              '',
+              `- **Tipo detectado:** \`${LABEL}\``,
+              `- **Archivos relevantes:** \`game.js\`, \`index.html\``,
+              `- **Rama de referencia:** \`${context.ref.replace('refs/heads/', '')}\``,
+              `- **Commit:** \`${SHORT_SHA}\``,
+              '',
+              '### Checklist para el revisor',
+              '- [ ] Reproducir el problema siguiendo la descripción del issue',
+              '- [ ] Revisar `game.js` y/o `index.html` según aplique',
+              '- [ ] Verificar que no rompa funcionalidad existente',
+              '- [ ] Actualizar `AGENTS.md` si el cambio afecta la arquitectura',
+              ''
+            ].join('\n');
+
+            const newBody = (issue.body || '').trimEnd() + '\n' + template;
+
+            await github.rest.issues.update({
+              owner, repo,
+              issue_number: issue.number,
+              body: newBody
+            });
+
+            core.info(`Issue #${issue.number}: label="${LABEL}", sección de revisión añadida.`);
