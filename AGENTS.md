@@ -39,6 +39,12 @@
 - Canvas coords wrap toroidally (`game.js:27`), not clamped.
 - Collision: `dist < radius` for bullets, `dist < ship.radius + asteroid.radius*0.82` for ship (`game.js:555`); `dist < ship.radius + powerup.radius` for power-up pickup (`game.js:491`).
 
+## CI — triaje automático de issues
+- `.github/workflows/issue-triage.yml` se dispara en cada issue abierto (`on: issues [opened]`).
+- Detecta la categoría del issue por keywords en título+cuerpo (`bug` / `feature` / `mejora` / `pregunta`, fallback `otros`), crea las labels faltantes vía API y aplica la detectada.
+- Concatena al final del cuerpo (sin alterar el texto del autor) una sección `⚙️ Información de revisión`: tipo detectado, archivos relevantes (`game.js`, `index.html`), rama, commit y checklist para el revisor. Guarda contra duplicados re-checkando si la sección ya existe.
+- Implementado con `actions/github-script@v7`; requiere permiso `issues: write`. No depende del workflow `opencode.yml`.
+
 ## Gotchas
 - Single file — edits to game logic all target `game.js`. Don't add bundler/imports without reason.
 - `justPressed` is consumed on read (`game.js:20-24`) — calling `pressed()` twice in one frame loses the second check.
