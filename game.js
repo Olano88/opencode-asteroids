@@ -216,6 +216,14 @@ const SKINS = [
     points: [[22,0],[6,-8],[-8,-4],[-12,0],[-8,4],[6,8]],
     exhaust: -6, exhaustHalf: 3,
   },
+  {
+    id: 'titan', name: 'Titán', line: '#a0f',
+    flame: 'rgba(160,0,255,0.85)',
+    points: [[40,0],[-24,-18],[-14,0],[-24,18]],
+    exhaust: -16, exhaustHalf: 8,
+    sizeScale: 2,
+    pointsMultiplier: 2,
+  },
 ];
 
 let skinIndex = (() => {
@@ -231,6 +239,10 @@ function cycleSkin() {
   skinFlashTimer = 2;
 }
 
+function getScoreMultiplier() {
+  return SKINS[skinIndex].pointsMultiplier || 1;
+}
+
 // ── Ship ──────────────────────────────────────────────────────────────────────
 class Ship {
   constructor() { this.reset(); }
@@ -241,7 +253,7 @@ class Ship {
     this.angle  = -Math.PI / 2;
     this.vx     = 0;
     this.vy     = 0;
-    this.radius = 12;
+    this.radius = 12 * (SKINS[skinIndex].sizeScale || 1);
     this.thrusting     = false;
     this.invincible    = 3;
     this.shootCooldown = 0;
@@ -282,11 +294,11 @@ class Ship {
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
     this.shootCooldown = 0.2;
-    const NOSE = 21;
+    const NOSE = 21 * (SKINS[skinIndex].sizeScale || 1);
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
     if (this.tripleTimer > 0) {
-      const OFFSET = 8;
+      const OFFSET = 8 * (SKINS[skinIndex].sizeScale || 1);
       const perpX = -Math.sin(this.angle) * OFFSET;
       const perpY =  Math.cos(this.angle) * OFFSET;
       return [
@@ -306,7 +318,7 @@ class Ship {
     if (this.shieldTimer > 0) {
       const blink = this.shieldTimer < 1 && Math.floor(this.shieldTimer * 10) % 2 === 0;
       if (!blink) {
-        const SHIELD_R = 22;
+        const SHIELD_R = 22 * (SKINS[skinIndex].sizeScale || 1);
         ctx.save();
         ctx.strokeStyle = 'rgba(80,160,255,0.75)';
         ctx.lineWidth   = 2;
@@ -573,7 +585,7 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += a.points;
+        score += a.points * getScoreMultiplier();
         explode(a.x, a.y, a.size * 5);
         if (!a.shootingStar) {
           if (powerups.filter(p => p.type === 'velocidad').length < 3 && Math.random() < 0.08)
@@ -596,7 +608,7 @@ function update(dt) {
       if (dist(ship, a) < ship.radius + a.radius * 0.82) {
         if (ship.shieldTimer > 0) {
           a.dead = true;
-          score += a.points;
+          score += a.points * getScoreMultiplier();
           explode(a.x, a.y, a.size * 5);
           newAsteroids.push(...a.split());
         } else {
